@@ -24,3 +24,4 @@ Vercel project connected to this GitHub repo. Environment variables from `.env.e
 
 - System font stack on purpose: no build-time dependency on Google Fonts.
 - Backend lives in `budget-tracker-api`. Auth is Supabase Auth; the backend validates the Supabase JWT.
+# budget-tracker-web
