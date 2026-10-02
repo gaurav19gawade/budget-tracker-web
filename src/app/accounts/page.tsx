@@ -1,41 +1,16 @@
 "use client";
 
-import Script from "next/script";
 import { useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { AuthGate } from "@/components/AuthGate";
 import { Button, Card, ErrorText } from "@/components/ui";
 import { ApiError, apiFetch } from "@/lib/api";
-import { TELLER_APPLICATION_ID, TELLER_ENV } from "@/lib/config";
 import type { Account } from "@/lib/types";
-
-// ---- Teller Connect types (CDN widget, no npm package) --------------------------
-
-type TellerAuthorization = {
-  enrollment: { id: string; institution: { name: string; id: string } };
-  accessToken: string;
-};
-
-declare global {
-  interface Window {
-    TellerConnect: {
-      setup(config: {
-        applicationId: string;
-        environment: string;
-        onSuccess: (auth: TellerAuthorization) => void;
-        onExit?: () => void;
-      }): { open(): void };
-    };
-  }
-}
-
-// ---- Accounts page --------------------------------------------------------------
 
 export default function AccountsPage() {
   return (
     <AuthGate>
       <AppShell>
-        <Script src="https://cdn.teller.io/connect/connect.js" strategy="lazyOnload" />
         <AccountsContent />
       </AppShell>
     </AuthGate>
@@ -46,6 +21,8 @@ function AccountsContent() {
   const [accounts, setAccounts] = useState<Account[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showConnect, setShowConnect] = useState(false);
+  const [setupToken, setSetupToken] = useState("");
   const [connectBusy, setConnectBusy] = useState(false);
 
   async function loadAccounts() {
@@ -64,33 +41,24 @@ function AccountsContent() {
   // Load on mount
   useState(() => { loadAccounts(); });
 
-  async function onTellerSuccess(auth: TellerAuthorization) {
+  async function onConnect(e: React.FormEvent) {
+    e.preventDefault();
+    if (!setupToken.trim()) return;
     setConnectBusy(true);
     setError(null);
     try {
-      await apiFetch("/api/teller/enrollments", {
+      await apiFetch("/api/simplefin/connections", {
         method: "POST",
-        body: JSON.stringify({
-          enrollmentId: auth.enrollment.id,
-          accessToken: auth.accessToken,
-        }),
+        body: JSON.stringify({ setupToken: setupToken.trim() }),
       });
+      setSetupToken("");
+      setShowConnect(false);
       await loadAccounts();
     } catch (e) {
       setError(e instanceof ApiError || e instanceof Error ? e.message : "Failed to connect account.");
     } finally {
       setConnectBusy(false);
     }
-  }
-
-  function openTellerConnect() {
-    if (!window.TellerConnect || !TELLER_APPLICATION_ID) return;
-    const connect = window.TellerConnect.setup({
-      applicationId: TELLER_APPLICATION_ID,
-      environment: TELLER_ENV,
-      onSuccess: onTellerSuccess,
-    });
-    connect.open();
   }
 
   async function removeAccount(id: string) {
@@ -107,20 +75,54 @@ function AccountsContent() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold tracking-tight">Bank Accounts</h1>
-        <Button
-          disabled={connectBusy || !TELLER_APPLICATION_ID}
-          onClick={openTellerConnect}
-          title={!TELLER_APPLICATION_ID ? "Teller not configured" : undefined}
-        >
-          {connectBusy ? "Connecting…" : "Connect account"}
+        <Button onClick={() => { setShowConnect((v) => !v); setError(null); }}>
+          {showConnect ? "Cancel" : "Connect account"}
         </Button>
       </div>
+
+      {showConnect && (
+        <Card>
+          <div className="space-y-4">
+            <div>
+              <p className="text-sm font-medium">Step 1</p>
+              <p className="text-sm text-zinc-500">
+                Visit{" "}
+                <a
+                  href="https://beta-bridge.simplefin.org/create"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline hover:text-foreground"
+                >
+                  beta-bridge.simplefin.org/create
+                </a>
+                , connect your bank, and copy the setup token.
+              </p>
+            </div>
+            <form onSubmit={onConnect} className="space-y-3">
+              <div>
+                <p className="mb-1 text-sm font-medium">Step 2 — Paste your setup token</p>
+                <textarea
+                  className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm font-mono dark:border-zinc-700 dark:bg-zinc-900"
+                  rows={3}
+                  placeholder="Paste token here…"
+                  value={setupToken}
+                  onChange={(e) => setSetupToken(e.target.value)}
+                  disabled={connectBusy}
+                />
+              </div>
+              <Button type="submit" disabled={connectBusy || !setupToken.trim()}>
+                {connectBusy ? "Connecting…" : "Connect"}
+              </Button>
+            </form>
+          </div>
+        </Card>
+      )}
 
       {error && <ErrorText>{error}</ErrorText>}
 
       {loading && <p className="text-sm text-zinc-500">Loading…</p>}
 
-      {!loading && accounts !== null && accounts.length === 0 && (
+      {!loading && accounts !== null && accounts.length === 0 && !showConnect && (
         <Card>
           <p className="text-sm text-zinc-500">
             No accounts connected yet. Click <strong>Connect account</strong> to link your bank.
