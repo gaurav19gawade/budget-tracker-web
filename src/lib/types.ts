@@ -47,3 +47,24 @@ export type Account = {
   balanceLedger: number | null;
   lastSyncedAt: string | null;
 };
+
+export type Transaction = {
+  id: string;
+  accountId: string;
+  amount: number;
+  currency: string;
+  description: string | null;
+  payee: string | null;
+  memo: string | null;
+  postedDate: string | null;
+  transactedAt: string | null;
+  pending: boolean;
+  isInternalTransfer: boolean;
+  createdAt: string;
+};
+
+export type SyncResult = {
+  newTransactions: number;
+  updatedTransactions: number;
+  syncedAt: string;
+};

@@ -5,7 +5,7 @@ import { AppShell } from "@/components/AppShell";
 import { AuthGate } from "@/components/AuthGate";
 import { Button, Card, ErrorText } from "@/components/ui";
 import { ApiError, apiFetch } from "@/lib/api";
-import type { Account } from "@/lib/types";
+import type { Account, SyncResult } from "@/lib/types";
 
 export default function AccountsPage() {
   return (
@@ -24,6 +24,8 @@ function AccountsContent() {
   const [showConnect, setShowConnect] = useState(false);
   const [setupToken, setSetupToken] = useState("");
   const [connectBusy, setConnectBusy] = useState(false);
+  const [syncBusy, setSyncBusy] = useState(false);
+  const [lastSync, setLastSync] = useState<SyncResult | null>(null);
 
   async function loadAccounts() {
     setLoading(true);
@@ -61,6 +63,20 @@ function AccountsContent() {
     }
   }
 
+  async function onSync() {
+    setSyncBusy(true);
+    setError(null);
+    try {
+      const result = await apiFetch<SyncResult>("/api/sync", { method: "POST" });
+      setLastSync(result);
+      await loadAccounts();
+    } catch (e) {
+      setError(e instanceof ApiError || e instanceof Error ? e.message : "Sync failed.");
+    } finally {
+      setSyncBusy(false);
+    }
+  }
+
   async function removeAccount(id: string) {
     setError(null);
     try {
@@ -71,14 +87,31 @@ function AccountsContent() {
     }
   }
 
+  const hasAccounts = accounts != null && accounts.length > 0;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold tracking-tight">Bank Accounts</h1>
-        <Button onClick={() => { setShowConnect((v) => !v); setError(null); }}>
-          {showConnect ? "Cancel" : "Connect account"}
-        </Button>
+        <div className="flex items-center gap-2">
+          {hasAccounts && (
+            <Button variant="secondary" onClick={onSync} disabled={syncBusy}>
+              {syncBusy ? "Syncing…" : "Sync now"}
+            </Button>
+          )}
+          <Button onClick={() => { setShowConnect((v) => !v); setError(null); }}>
+            {showConnect ? "Cancel" : "Connect account"}
+          </Button>
+        </div>
       </div>
+
+      {lastSync && (
+        <p className="text-sm text-zinc-500">
+          Last sync: {lastSync.newTransactions} new, {lastSync.updatedTransactions} updated transaction
+          {lastSync.newTransactions + lastSync.updatedTransactions !== 1 ? "s" : ""} —{" "}
+          {new Date(lastSync.syncedAt).toLocaleTimeString()}
+        </p>
+      )}
 
       {showConnect && (
         <Card>
@@ -159,6 +192,10 @@ function AccountRow({
 
   const subtitle = [account.type, account.subtype].filter(Boolean).join(" · ");
 
+  const syncedLabel = account.lastSyncedAt
+    ? new Date(account.lastSyncedAt).toLocaleString()
+    : null;
+
   return (
     <Card>
       <div className="flex items-center justify-between gap-4">
@@ -171,6 +208,9 @@ function AccountRow({
           </p>
           <p className="text-sm text-zinc-500">{account.name}</p>
           {subtitle && <p className="text-xs capitalize text-zinc-400">{subtitle}</p>}
+          {syncedLabel && (
+            <p className="text-xs text-zinc-400">Synced {syncedLabel}</p>
+          )}
         </div>
         <div className="flex shrink-0 items-center gap-3">
           <span className="text-sm font-medium tabular-nums">{balance}</span>
