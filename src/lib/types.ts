@@ -34,3 +34,16 @@ export type CreatedInvite = {
   token: string;
   expiresAt: string;
 };
+
+export type Account = {
+  id: string;
+  institution: string;
+  name: string;
+  type: string;
+  subtype: string | null;
+  lastFour: string | null;
+  currency: string;
+  balanceAvailable: number | null;
+  balanceLedger: number | null;
+  lastSyncedAt: string | null;
+};

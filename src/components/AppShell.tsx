@@ -23,6 +23,9 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Link href="/" className="font-semibold">
               Budget Tracker
             </Link>
+            <Link href="/accounts" className="text-zinc-600 hover:text-foreground dark:text-zinc-400">
+              Accounts
+            </Link>
             <Link href="/household" className="text-zinc-600 hover:text-foreground dark:text-zinc-400">
               Household
             </Link>
