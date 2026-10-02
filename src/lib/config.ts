@@ -2,6 +2,8 @@
 export const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080").replace(/\/+$/, "");
 export const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 export const SUPABASE_PUBLISHABLE_KEY = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? "";
+export const TELLER_APPLICATION_ID = process.env.NEXT_PUBLIC_TELLER_APPLICATION_ID ?? "";
+export const TELLER_ENV = (process.env.NEXT_PUBLIC_TELLER_ENV ?? "sandbox") as "sandbox" | "development" | "production";
 
 /**
  * Sign-in is on when Supabase is configured. With no Supabase variables (local development
