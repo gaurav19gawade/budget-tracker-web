@@ -60,6 +60,33 @@ export type Transaction = {
   transactedAt: string | null;
   pending: boolean;
   isInternalTransfer: boolean;
+  categoryId: string | null;
+  categoryOverride: boolean;
+  createdAt: string;
+};
+
+export type Category = {
+  id: string;
+  name: string;
+  color: string | null;
+  icon: string | null;
+  isSystem: boolean;
+  createdAt: string;
+};
+
+export type MatchField =
+  | "PAYEE_CONTAINS"
+  | "DESCRIPTION_CONTAINS"
+  | "AMOUNT_GTE"
+  | "AMOUNT_LTE"
+  | "ACCOUNT_ID";
+
+export type CategoryRule = {
+  id: string;
+  categoryId: string;
+  priority: number;
+  matchField: MatchField;
+  matchValue: string;
   createdAt: string;
 };
 

@@ -29,6 +29,12 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Link href="/transactions" className="text-zinc-600 hover:text-foreground dark:text-zinc-400">
               Transactions
             </Link>
+            <Link href="/categories" className="text-zinc-600 hover:text-foreground dark:text-zinc-400">
+              Categories
+            </Link>
+            <Link href="/rules" className="text-zinc-600 hover:text-foreground dark:text-zinc-400">
+              Rules
+            </Link>
             <Link href="/household" className="text-zinc-600 hover:text-foreground dark:text-zinc-400">
               Household
             </Link>
