@@ -95,3 +95,14 @@ export type SyncResult = {
   updatedTransactions: number;
   syncedAt: string;
 };
+
+export type BudgetSummaryEntry = {
+  categoryId: string | null;
+  categoryName: string;
+  categoryColor: string | null;
+  categoryIcon: string | null;
+  budgeted: number;
+  spent: number;
+  income: number;
+  available: number;
+};
