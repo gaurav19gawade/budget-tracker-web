@@ -115,7 +115,12 @@ function RulesContent() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold tracking-tight">Category Rules</h1>
         <div className="flex gap-2">
-          <Button variant="secondary" onClick={onApply} disabled={busy}>
+          <Button
+            variant="secondary"
+            onClick={onApply}
+            disabled={busy || (rules !== null && rules.length === 0)}
+            title={rules !== null && rules.length === 0 ? "No rules to apply" : undefined}
+          >
             Apply rules
           </Button>
           <Button onClick={() => { setShowForm((v) => !v); setError(null); setApplyResult(null); }}>
