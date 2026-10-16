@@ -96,6 +96,15 @@ export type SyncResult = {
   syncedAt: string;
 };
 
+export type RuleSuggestion = {
+  payee: string;
+  matchCount: number;
+  categoryId: string;
+  categoryName: string;
+  categoryColor: string | null;
+  categoryIcon: string | null;
+};
+
 export type BudgetSummaryEntry = {
   categoryId: string | null;
   categoryName: string;

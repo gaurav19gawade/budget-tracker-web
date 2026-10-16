@@ -5,7 +5,7 @@ import { AppShell } from "@/components/AppShell";
 import { AuthGate } from "@/components/AuthGate";
 import { Button, Card, ErrorText, inputClass } from "@/components/ui";
 import { ApiError, apiFetch } from "@/lib/api";
-import type { Category, CategoryRule, MatchField } from "@/lib/types";
+import type { Category, CategoryRule, MatchField, RuleSuggestion } from "@/lib/types";
 
 export default function RulesPage() {
   return (
@@ -33,6 +33,11 @@ function RulesContent() {
   const [showForm, setShowForm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [applyResult, setApplyResult] = useState<{ categorized: number } | null>(null);
+
+  // suggestions state
+  const [suggestions, setSuggestions] = useState<RuleSuggestion[] | null>(null);
+  const [suggestLoading, setSuggestLoading] = useState(false);
+  const [suggestError, setSuggestError] = useState<string | null>(null);
 
   // form state
   const [categoryId, setCategoryId] = useState("");
@@ -108,6 +113,25 @@ function RulesContent() {
     }
   }
 
+  async function onSuggest() {
+    setSuggestLoading(true);
+    setSuggestError(null);
+    setSuggestions(null);
+    try {
+      const result = await apiFetch<RuleSuggestion[]>("/api/category-rules/suggestions");
+      setSuggestions(result);
+    } catch (err) {
+      setSuggestError(err instanceof ApiError || err instanceof Error ? err.message : "Failed to get suggestions.");
+    } finally {
+      setSuggestLoading(false);
+    }
+  }
+
+  function onSuggestionCreated(payee: string) {
+    setSuggestions((prev) => prev?.filter((s) => s.payee !== payee) ?? null);
+    load();
+  }
+
   const categoryMap = Object.fromEntries((categories ?? []).map((c) => [c.id, c]));
 
   return (
@@ -122,6 +146,13 @@ function RulesContent() {
             title={rules !== null && rules.length === 0 ? "No rules to apply" : undefined}
           >
             Apply rules
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={onSuggest}
+            disabled={suggestLoading}
+          >
+            {suggestLoading ? "Thinking…" : "Suggest rules"}
           </Button>
           <Button onClick={() => { setShowForm((v) => !v); setError(null); setApplyResult(null); }}>
             {showForm ? "Cancel" : "New rule"}
@@ -197,6 +228,37 @@ function RulesContent() {
       {error && <ErrorText>{error}</ErrorText>}
       {loading && <p className="text-sm text-zinc-500">Loading…</p>}
 
+      {/* Suggestions panel */}
+      {suggestError && <ErrorText>{suggestError}</ErrorText>}
+      {suggestions !== null && (
+        <section className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-base font-medium">Suggested rules</h2>
+            <Button variant="secondary" onClick={() => setSuggestions(null)}>
+              Dismiss all
+            </Button>
+          </div>
+          {suggestions.length === 0 ? (
+            <Card>
+              <p className="text-sm text-zinc-500">
+                No suggestions — all transactions are already categorized or covered by existing rules.
+              </p>
+            </Card>
+          ) : (
+            <div className="space-y-2">
+              {suggestions.map((s) => (
+                <SuggestionRow
+                  key={s.payee}
+                  suggestion={s}
+                  categories={categories ?? []}
+                  onCreated={() => onSuggestionCreated(s.payee)}
+                />
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
       {rules && rules.length === 0 && !loading && (
         <Card>
           <p className="text-sm text-zinc-500">No rules yet. Create a rule to auto-categorize transactions.</p>
@@ -216,6 +278,77 @@ function RulesContent() {
         </div>
       )}
     </div>
+  );
+}
+
+function SuggestionRow({
+  suggestion,
+  categories,
+  onCreated,
+}: {
+  suggestion: RuleSuggestion;
+  categories: Category[];
+  onCreated: () => void;
+}) {
+  const [categoryId, setCategoryId] = useState(suggestion.categoryId);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [dismissed, setDismissed] = useState(false);
+
+  if (dismissed) return null;
+
+  async function onCreate() {
+    setBusy(true);
+    setError(null);
+    try {
+      await apiFetch("/api/category-rules", {
+        method: "POST",
+        body: JSON.stringify({
+          categoryId,
+          priority: 0,
+          matchField: "PAYEE_CONTAINS",
+          matchValue: suggestion.payee,
+        }),
+      });
+      onCreated();
+    } catch (err) {
+      setError(err instanceof ApiError || err instanceof Error ? err.message : "Failed to create.");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-medium">{suggestion.payee}</p>
+          <p className="text-xs text-zinc-400">
+            {suggestion.matchCount} uncategorized transaction{suggestion.matchCount !== 1 ? "s" : ""}
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <select
+            className={inputClass}
+            value={categoryId}
+            onChange={(e) => setCategoryId(e.target.value)}
+            disabled={busy}
+          >
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.icon ? `${c.icon} ` : ""}{c.name}
+              </option>
+            ))}
+          </select>
+          <Button onClick={onCreate} disabled={busy}>
+            {busy ? "Creating…" : "Create rule"}
+          </Button>
+          <Button variant="secondary" onClick={() => setDismissed(true)} disabled={busy}>
+            Dismiss
+          </Button>
+        </div>
+      </div>
+      {error && <ErrorText>{error}</ErrorText>}
+    </Card>
   );
 }
 
