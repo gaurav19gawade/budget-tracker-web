@@ -38,6 +38,10 @@ function RulesContent() {
   const [suggestions, setSuggestions] = useState<RuleSuggestion[] | null>(null);
   const [suggestLoading, setSuggestLoading] = useState(false);
   const [suggestError, setSuggestError] = useState<string | null>(null);
+  // per-payee category overrides (keyed by payee string)
+  const [categoryOverrides, setCategoryOverrides] = useState<Record<string, string>>({});
+  // per-category loading state for "Create all" buttons
+  const [groupBusy, setGroupBusy] = useState<Record<string, boolean>>({});
 
   // form state
   const [categoryId, setCategoryId] = useState("");
@@ -117,6 +121,7 @@ function RulesContent() {
     setSuggestLoading(true);
     setSuggestError(null);
     setSuggestions(null);
+    setCategoryOverrides({});
     try {
       const result = await apiFetch<RuleSuggestion[]>("/api/category-rules/suggestions");
       setSuggestions(result);
@@ -127,9 +132,47 @@ function RulesContent() {
     }
   }
 
-  function onSuggestionCreated(payee: string) {
+  /** Creates rules for every suggestion in a category group in parallel. */
+  async function createAllForCategory(catId: string, group: RuleSuggestion[]) {
+    setGroupBusy((prev) => ({ ...prev, [catId]: true }));
+    const created: string[] = [];
+    await Promise.all(
+      group.map(async (s) => {
+        try {
+          await apiFetch("/api/category-rules", {
+            method: "POST",
+            body: JSON.stringify({
+              categoryId: catId,
+              priority: 0,
+              matchField: "PAYEE_CONTAINS",
+              matchValue: s.payee,
+            }),
+          });
+          created.push(s.payee);
+        } catch {
+          // leave failed ones in the list so the user can retry
+        }
+      })
+    );
+    setSuggestions((prev) => prev?.filter((s) => !created.includes(s.payee)) ?? null);
+    setGroupBusy((prev) => ({ ...prev, [catId]: false }));
+    if (created.length > 0) load();
+  }
+
+  function dismissSuggestion(payee: string) {
     setSuggestions((prev) => prev?.filter((s) => s.payee !== payee) ?? null);
-    load();
+  }
+
+  function onCategoryOverride(payee: string, newCatId: string) {
+    setCategoryOverrides((prev) => ({ ...prev, [payee]: newCatId }));
+  }
+
+  // Group suggestions by their effective category (AI suggestion or user override)
+  const grouped: Record<string, RuleSuggestion[]> = {};
+  for (const s of suggestions ?? []) {
+    const catId = categoryOverrides[s.payee] ?? s.categoryId;
+    if (!grouped[catId]) grouped[catId] = [];
+    grouped[catId].push(s);
   }
 
   const categoryMap = Object.fromEntries((categories ?? []).map((c) => [c.id, c]));
@@ -147,11 +190,7 @@ function RulesContent() {
           >
             Apply rules
           </Button>
-          <Button
-            variant="secondary"
-            onClick={onSuggest}
-            disabled={suggestLoading}
-          >
+          <Button variant="secondary" onClick={onSuggest} disabled={suggestLoading}>
             {suggestLoading ? "Thinking…" : "Suggest rules"}
           </Button>
           <Button onClick={() => { setShowForm((v) => !v); setError(null); setApplyResult(null); }}>
@@ -228,16 +267,17 @@ function RulesContent() {
       {error && <ErrorText>{error}</ErrorText>}
       {loading && <p className="text-sm text-zinc-500">Loading…</p>}
 
-      {/* Suggestions panel */}
+      {/* Suggestions panel — grouped by category */}
       {suggestError && <ErrorText>{suggestError}</ErrorText>}
       {suggestions !== null && (
-        <section className="space-y-3">
+        <section className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-base font-medium">Suggested rules</h2>
             <Button variant="secondary" onClick={() => setSuggestions(null)}>
               Dismiss all
             </Button>
           </div>
+
           {suggestions.length === 0 ? (
             <Card>
               <p className="text-sm text-zinc-500">
@@ -245,16 +285,54 @@ function RulesContent() {
               </p>
             </Card>
           ) : (
-            <div className="space-y-2">
-              {suggestions.map((s) => (
-                <SuggestionRow
-                  key={s.payee}
-                  suggestion={s}
-                  categories={categories ?? []}
-                  onCreated={() => onSuggestionCreated(s.payee)}
-                />
-              ))}
-            </div>
+            Object.entries(grouped).map(([catId, group]) => {
+              const cat = categoryMap[catId];
+              return (
+                <div key={catId} className="space-y-2">
+                  {/* Category group header */}
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      {cat?.color && (
+                        <span
+                          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs"
+                          style={{ backgroundColor: cat.color }}
+                        >
+                          {cat?.icon ?? ""}
+                        </span>
+                      )}
+                      <span className="text-sm font-medium">{cat?.name ?? catId}</span>
+                      <span className="text-xs text-zinc-400">
+                        {group.length} rule{group.length !== 1 ? "s" : ""}
+                      </span>
+                    </div>
+                    <Button
+                      onClick={() => createAllForCategory(catId, group)}
+                      disabled={groupBusy[catId]}
+                    >
+                      {groupBusy[catId]
+                        ? "Creating…"
+                        : `Create all ${group.length} rule${group.length !== 1 ? "s" : ""}`}
+                    </Button>
+                  </div>
+
+                  {/* Individual rows */}
+                  {group.map((s) => (
+                    <SuggestionRow
+                      key={s.payee}
+                      suggestion={s}
+                      categoryId={categoryOverrides[s.payee] ?? s.categoryId}
+                      categories={categories ?? []}
+                      onCategoryChange={(newCatId) => onCategoryOverride(s.payee, newCatId)}
+                      onCreated={() => {
+                        setSuggestions((prev) => prev?.filter((x) => x.payee !== s.payee) ?? null);
+                        load();
+                      }}
+                      onDismiss={() => dismissSuggestion(s.payee)}
+                    />
+                  ))}
+                </div>
+              );
+            })
           )}
         </section>
       )}
@@ -283,19 +361,21 @@ function RulesContent() {
 
 function SuggestionRow({
   suggestion,
+  categoryId,
   categories,
+  onCategoryChange,
   onCreated,
+  onDismiss,
 }: {
   suggestion: RuleSuggestion;
+  categoryId: string;
   categories: Category[];
+  onCategoryChange: (catId: string) => void;
   onCreated: () => void;
+  onDismiss: () => void;
 }) {
-  const [categoryId, setCategoryId] = useState(suggestion.categoryId);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [dismissed, setDismissed] = useState(false);
-
-  if (dismissed) return null;
 
   async function onCreate() {
     setBusy(true);
@@ -330,7 +410,7 @@ function SuggestionRow({
           <select
             className={inputClass}
             value={categoryId}
-            onChange={(e) => setCategoryId(e.target.value)}
+            onChange={(e) => onCategoryChange(e.target.value)}
             disabled={busy}
           >
             {categories.map((c) => (
@@ -339,10 +419,10 @@ function SuggestionRow({
               </option>
             ))}
           </select>
-          <Button onClick={onCreate} disabled={busy}>
-            {busy ? "Creating…" : "Create rule"}
+          <Button variant="secondary" onClick={onCreate} disabled={busy}>
+            {busy ? "Creating…" : "Create"}
           </Button>
-          <Button variant="secondary" onClick={() => setDismissed(true)} disabled={busy}>
+          <Button variant="secondary" onClick={onDismiss} disabled={busy}>
             Dismiss
           </Button>
         </div>
